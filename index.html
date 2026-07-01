@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#E53935">
+<title>番茄钟</title>
+<link rel="manifest" href="manifest.json">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100dvh;
+  background: #F5F5F5;
+  color: #333;
+  transition: background 0.5s;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+body.work { background: #FFF5F5; }
+body.break { background: #F1F8E9; }
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  padding: 20px;
+  width: 100%;
+  max-width: 400px;
+}
+.emoji { font-size: 64px; transition: transform 0.3s; }
+.timer-ring {
+  position: relative;
+  width: 240px;
+  height: 240px;
+}
+.timer-ring svg { transform: rotate(-90deg); width: 240px; height: 240px; }
+.timer-ring .bg { fill: none; stroke: #E0E0E0; stroke-width: 8; }
+.timer-ring .progress { fill: none; stroke: #E53935; stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 0.3s, stroke 0.5s; }
+body.break .timer-ring .progress { stroke: #43A047; }
+.timer-text {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 48px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 2px;
+}
+.buttons { display: flex; gap: 16px; }
+.btn {
+  padding: 14px 36px;
+  border: none;
+  border-radius: 50px;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.2s;
+  color: #fff;
+}
+.btn:active { transform: scale(0.95); }
+.btn-start { background: #E53935; box-shadow: 0 4px 15px rgba(229,57,53,0.4); }
+body.break .btn-start { background: #43A047; box-shadow: 0 4px 15px rgba(67,160,71,0.4); }
+.btn-reset { background: #757575; box-shadow: 0 4px 15px rgba(117,117,117,0.3); }
+.status {
+  font-size: 14px;
+  font-weight: 500;
+  color: #E53935;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+}
+body.break .status { color: #43A047; }
+.settings-toggle {
+  font-size: 14px;
+  color: #999;
+  cursor: pointer;
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  background: #fff;
+}
+.settings {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+  background: #fff;
+  padding: 16px 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  width: 100%;
+  max-width: 280px;
+}
+.settings.open { display: flex; }
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.setting-row label { font-size: 15px; white-space: nowrap; }
+.setting-row input {
+  width: 70px;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 16px;
+  text-align: center;
+}
+</style>
+</head>
+<body class="work">
+<div class="container">
+  <div class="emoji">🍅</div>
+  <div class="timer-ring">
+    <svg viewBox="0 0 240 240">
+      <circle class="bg" cx="120" cy="120" r="110"/>
+      <circle class="progress" id="progress" cx="120" cy="120" r="110"
+        stroke-dasharray="691.15" stroke-dashoffset="0"/>
+    </svg>
+    <div class="timer-text" id="timer">25:00</div>
+  </div>
+  <div class="status" id="status">工作中</div>
+  <div class="buttons">
+    <button class="btn btn-start" id="btnStart">开始</button>
+    <button class="btn btn-reset" id="btnReset">重置</button>
+  </div>
+  <div class="settings-toggle" id="settingsToggle">⚙ 设置 (25 / 5 分钟)</div>
+  <div class="settings" id="settings">
+    <div class="setting-row">
+      <label>工作 (分钟)</label>
+      <input type="number" id="workTime" value="25" min="1" max="120">
+    </div>
+    <div class="setting-row">
+      <label>休息 (分钟)</label>
+      <input type="number" id="breakTime" value="5" min="1" max="60">
+    </div>
+  </div>
+</div>
+<script>
+const CIRCUMFERENCE = 2 * Math.PI * 110;
+
+const timerEl = document.getElementById("timer");
+const progressEl = document.getElementById("progress");
+const statusEl = document.getElementById("status");
+const btnStart = document.getElementById("btnStart");
+const btnReset = document.getElementById("btnReset");
+const workInput = document.getElementById("workTime");
+const breakInput = document.getElementById("breakTime");
+const settingsToggle = document.getElementById("settingsToggle");
+const settingsEl = document.getElementById("settings");
+const bodyEl = document.body;
+
+let workMinutes = 25;
+let breakMinutes = 5;
+let totalSeconds = workMinutes * 60;
+let remaining = totalSeconds;
+let interval = null;
+let isWork = true;
+let running = false;
+
+const saved = JSON.parse(localStorage.getItem("pomodoro") || "{}");
+if (saved.work) { workMinutes = saved.work; workInput.value = workMinutes; }
+if (saved.break) { breakMinutes = saved.break; breakInput.value = breakMinutes; }
+totalSeconds = workMinutes * 60;
+remaining = totalSeconds;
+
+function save() {
+  localStorage.setItem("pomodoro", JSON.stringify({ work: workMinutes, break: breakMinutes }));
+}
+
+function format(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+}
+
+function updateDisplay() {
+  timerEl.textContent = format(remaining);
+  const offset = CIRCUMFERENCE * (1 - remaining / totalSeconds);
+  progressEl.style.strokeDashoffset = offset;
+}
+
+function setPhase(work) {
+  isWork = work;
+  if (isWork) {
+    bodyEl.className = "work";
+    statusEl.textContent = "工作中";
+    totalSeconds = workMinutes * 60;
+    btnStart.className = "btn btn-start";
+  } else {
+    bodyEl.className = "break";
+    statusEl.textContent = "休息中";
+    totalSeconds = breakMinutes * 60;
+    btnStart.className = "btn btn-start";
+  }
+  remaining = totalSeconds;
+  updateDisplay();
+}
+
+function notify() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+    gain.gain.value = 0.3;
+    [800, 1000, 1200].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      osc.connect(gain);
+      osc.frequency.value = freq;
+      osc.type = "sine";
+      osc.start(ctx.currentTime + i * 0.4);
+      osc.stop(ctx.currentTime + i * 0.4 + 0.35);
+    });
+  } catch (e) {}
+
+  if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]);
+
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification(isWork ? "休息时间到！" : "工作时间到！", {
+      body: isWork ? "该休息了 🍵" : "继续加油 💪",
+      icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍅</text></svg>"
+    });
+  }
+}
+
+function tick() {
+  if (remaining <= 0) {
+    clearInterval(interval);
+    interval = null;
+    running = false;
+    btnStart.textContent = "开始";
+    notify();
+    setPhase(!isWork);
+    return;
+  }
+  remaining--;
+  updateDisplay();
+}
+
+btnStart.addEventListener("click", () => {
+  if (running) {
+    clearInterval(interval);
+    interval = null;
+    running = false;
+    btnStart.textContent = "继续";
+    return;
+  }
+
+  if ("Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission();
+  }
+
+  running = true;
+  btnStart.textContent = "暂停";
+  interval = setInterval(tick, 1000);
+});
+
+btnReset.addEventListener("click", () => {
+  clearInterval(interval);
+  interval = null;
+  running = false;
+  btnStart.textContent = "开始";
+  setPhase(isWork);
+});
+
+workInput.addEventListener("change", () => {
+  workMinutes = Math.max(1, parseInt(workInput.value) || 25);
+  workInput.value = workMinutes;
+  save();
+  if (!running && isWork) { totalSeconds = workMinutes * 60; remaining = totalSeconds; updateDisplay(); }
+});
+
+breakInput.addEventListener("change", () => {
+  breakMinutes = Math.max(1, parseInt(breakInput.value) || 5);
+  breakInput.value = breakMinutes;
+  save();
+  if (!running && !isWork) { totalSeconds = breakMinutes * 60; remaining = totalSeconds; updateDisplay(); }
+});
+
+settingsToggle.addEventListener("click", () => {
+  const open = settingsEl.classList.toggle("open");
+  settingsToggle.textContent = open
+    ? "⚙ 收起设置"
+    : `⚙ 设置 (${workMinutes} / ${breakMinutes} 分钟)`;
+});
+
+updateDisplay();
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js");
+}
+</script>
+</body>
+</html>
