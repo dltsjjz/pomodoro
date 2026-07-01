@@ -363,8 +363,14 @@ btnReset.addEventListener("click", () => {
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
-    if (!running && !ringing) {
-      setPhase(true);
+    if (ringing) {
+      if (audioCtx && audioCtx.state === "suspended") {
+        audioCtx.resume();
+      }
+      if (!ringingTimer) {
+        playMelody();
+        ringingTimer = setInterval(playMelody, 10000);
+      }
     } else if (running) {
       acquireWakeLock();
     }
