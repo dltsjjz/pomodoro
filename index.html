@@ -309,6 +309,7 @@ function stopRinging() {
     audioCtx.close().catch(() => {});
     audioCtx = null;
   }
+  btnStart.textContent = "开始";
   btnStart.className = "btn btn-start";
 }
 
