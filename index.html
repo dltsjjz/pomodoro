@@ -94,19 +94,6 @@ body.break .status { color: #43A047; }
   max-width: 280px;
 }
 .settings.open { display: flex; }
-.btn-test {
-  margin-top: 4px;
-  padding: 10px 24px;
-  border: none;
-  border-radius: 50px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  color: #fff;
-  background: #FF9800;
-  box-shadow: 0 4px 15px rgba(255,152,0,0.3);
-}
-.btn-test:active { transform: scale(0.95); }
 .setting-row {
   display: flex;
   justify-content: space-between;
@@ -141,7 +128,6 @@ body.break .status { color: #43A047; }
     <button class="btn btn-reset" id="btnReset">重置</button>
   </div>
   <div class="settings-toggle" id="settingsToggle">⚙ 设置 (25 / 5 分钟)</div>
-  <button class="btn-test" id="btnTest">🔔 测试铃声</button>
   <div class="settings" id="settings">
     <div class="setting-row">
       <label>工作 (分钟)</label>
@@ -225,7 +211,7 @@ function playMelody() {
     const ctx = audioCtx;
     const masterGain = ctx.createGain();
     masterGain.connect(ctx.destination);
-    masterGain.gain.value = 0.8;
+    masterGain.gain.value = 1.0;
 
     const notes = [
       [329.63, 0.0], [329.63, 0.3], [349.23, 0.6], [392.00, 0.9],
@@ -246,7 +232,7 @@ function playMelody() {
       osc.frequency.value = freq;
       osc.type = "triangle";
       const t = ctx.currentTime + start;
-      noteGain.gain.setValueAtTime(0.4, t);
+      noteGain.gain.setValueAtTime(0.6, t);
       noteGain.gain.exponentialRampToValueAtTime(0.001, t + 0.40);
       osc.start(t);
       osc.stop(t + 0.40);
@@ -323,12 +309,13 @@ btnReset.addEventListener("click", () => {
   interval = null;
   running = false;
   btnStart.textContent = "开始";
-  setPhase(isWork);
+  setPhase(true);
 });
 
-document.getElementById("btnTest").addEventListener("click", () => {
-  if (ringing) { stopRinging(); return; }
-  startRinging();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && !running && !ringing) {
+    setPhase(true);
+  }
 });
 
 workInput.addEventListener("change", () => {
